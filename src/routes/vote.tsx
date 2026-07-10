@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { getSession, setSession, clearSession } from "@/lib/session";
 import { supabase } from "@/integrations/supabase/client";
+import { NorwayFlag, EnglandFlag } from "@/components/Flag";
 
 export const Route = createFileRoute("/vote")({
   component: VotePage,
@@ -104,7 +105,7 @@ function VotePage() {
               <TeamCard
                 code="NOR"
                 name="Norway"
-                emoji="🇳🇴"
+                flag={<NorwayFlag className="h-20 w-28 rounded-md shadow-2xl ring-1 ring-black/20" />}
                 gradient="from-[oklch(0.62_0.22_25)] via-[oklch(0.5_0.18_260)] to-[oklch(0.3_0.1_265)]"
                 onPick={() => vote("NOR")}
                 disabled={submitting}
@@ -112,7 +113,7 @@ function VotePage() {
               <TeamCard
                 code="ENG"
                 name="England"
-                emoji="🏴󠁧󠁢󠁥󠁮󠁧󠁿"
+                flag={<EnglandFlag className="h-20 w-28 rounded-md shadow-2xl ring-1 ring-black/20" />}
                 gradient="from-white via-[oklch(0.85_0.02_265)] to-[oklch(0.55_0.24_27)]"
                 dark
                 onPick={() => vote("ENG")}
@@ -126,7 +127,13 @@ function VotePage() {
               animate={{ opacity: 1, scale: 1 }}
               className="mt-12 rounded-3xl border border-white/10 bg-white/5 p-10 text-center backdrop-blur-xl"
             >
-              <div className="text-6xl">{team === "NOR" ? "🇳🇴" : "🏴󠁧󠁢󠁥󠁮󠁧󠁿"}</div>
+              <div className="flex justify-center">
+                {team === "NOR" ? (
+                  <NorwayFlag className="h-20 w-32 rounded-md shadow-xl ring-1 ring-white/20" />
+                ) : (
+                  <EnglandFlag className="h-20 w-32 rounded-md shadow-xl ring-1 ring-white/20" />
+                )}
+              </div>
               <h2 className="mt-4 text-3xl font-black">
                 Vote locked in for {team === "NOR" ? "Norway" : "England"}!
               </h2>
@@ -149,7 +156,7 @@ function VotePage() {
 
 function TeamCard({
   name,
-  emoji,
+  flag,
   gradient,
   onPick,
   disabled,
@@ -157,7 +164,7 @@ function TeamCard({
 }: {
   code: string;
   name: string;
-  emoji: string;
+  flag: React.ReactNode;
   gradient: string;
   onPick: () => void;
   disabled: boolean;
@@ -172,7 +179,7 @@ function TeamCard({
       className={`group relative flex h-72 flex-col items-center justify-center overflow-hidden rounded-3xl bg-gradient-to-br ${gradient} p-8 text-left shadow-2xl transition disabled:opacity-60`}
     >
       <div className="absolute inset-0 opacity-20 mix-blend-overlay bg-[repeating-linear-gradient(45deg,black_0_2px,transparent_2px_20px)]" />
-      <div className="text-7xl drop-shadow-2xl">{emoji}</div>
+      <div className="drop-shadow-2xl">{flag}</div>
       <div className={`mt-4 text-4xl font-black tracking-tight ${dark ? "text-black" : "text-white"}`}>
         {name}
       </div>
@@ -190,9 +197,15 @@ function LiveBar({ nor, eng }: { nor: number; eng: number }) {
   return (
     <section className="mt-12 rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur">
       <div className="mb-3 flex items-center justify-between text-xs font-bold uppercase tracking-widest">
-        <span className="text-white/80">🇳🇴 {nor} · {norPct.toFixed(0)}%</span>
+        <span className="flex items-center gap-2 text-white/80">
+          <NorwayFlag className="h-4 w-6 rounded-sm" />
+          {nor} · {norPct.toFixed(0)}%
+        </span>
         <span className="text-white/50">Live votes</span>
-        <span className="text-white/80">{engPct.toFixed(0)}% · {eng} 🏴󠁧󠁢󠁥󠁮󠁧󠁿</span>
+        <span className="flex items-center gap-2 text-white/80">
+          {engPct.toFixed(0)}% · {eng}
+          <EnglandFlag className="h-4 w-6 rounded-sm" />
+        </span>
       </div>
       <div className="flex h-6 w-full overflow-hidden rounded-full border border-white/10 bg-black/40">
         <motion.div
