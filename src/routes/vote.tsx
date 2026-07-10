@@ -63,43 +63,55 @@ function VotePage() {
   }, []);
 
   useEffect(() => {
-    const s = getSession();
-    if (!s || !s.name) {
+    try {
+      const s = getSession();
+      if (!s || !s.name) {
+        navigate({ to: "/" });
+        return;
+      }
+      setName(s.name);
+      if (s.team) setTeam(s.team);
+    } catch (e) {
       navigate({ to: "/" });
-      return;
     }
-    setName(s.name);
-    if (s.team) setTeam(s.team);
   }, [navigate]);
 
   async function vote(t: "NOR" | "ENG") {
-    // Defensive check removed to prevent early click blockages
-    setSubmitting(true);
-    setErr("");
-
-    const activeName = name || getSession()?.name || "Anonymous";
-
-    if (!supabase || typeof supabase.from !== 'function') {
-      alert("Error: Supabase connection client is missing.");
-      setSubmitting(false);
-      return;
-    }
-
+    // Wrap the entire execution in a master try/catch to prevent silent browser crashes
     try {
+      if (submitting) return;
+      setSubmitting(true);
+      setErr("");
+
+      // Safely extract name without crashing if localStorage is locked
+      let activeName = name;
+      if (!activeName) {
+        try { activeName = getSession()?.name; } catch (e) {}
+      }
+      if (!activeName) activeName = "Anonymous";
+
+      if (!supabase || typeof supabase.from !== 'function') {
+        alert("Error: Supabase connection client is missing. Check Vercel variables.");
+        setSubmitting(false);
+        return;
+      }
+
       const { error } = await supabase.from("votes").insert({ name: activeName, team: t });
+      
       if (error) {
-        alert("Database Error: " + error.message + " (Code: " + error.code + ")");
+        alert("Database Blocked the Vote: " + error.message + " (Code: " + error.code + ")");
         setErr(error.message);
         setSubmitting(false);
         return;
       }
-      setSession({ name: activeName, team: t });
+
+      try { setSession({ name: activeName, team: t }); } catch (e) {}
       setTeam(t);
-      load(); // Refresh state data dynamically
-    } catch (catchErr) {
-      alert("Catch Block Error: " + (catchErr as Error).message);
-      setErr("Failed to submit vote.");
-    } finally {
+      load();
+      setSubmitting(false);
+    } catch (fatalErr) {
+      alert("Execution Error: " + (fatalErr as Error).message);
+      setErr("Failed to submit vote due to a browser execution error.");
       setSubmitting(false);
     }
   }
@@ -178,15 +190,15 @@ function VotePage() {
             >
               <div className="flex justify-center">
                 {team === "NOR" ? (
-                  NorwayFlag ? <NorwayFlag className="h-20 w-32 rounded-md shadow-xl ring-1 ring-white/20" /> : <div className="text-4xl">🇳🇴</div>
+                  NorwayFlag ? <NorwayFlag className="h-20 w-32 rounded-md shadow-xl ring-1 ring-white/20" /> : <div className="text-4xl pointer-events-none">🇳🇴</div>
                 ) : (
-                  EnglandFlag ? <EnglandFlag className="h-20 w-32 rounded-md shadow-xl ring-1 ring-white/20" /> : <div className="text-4xl">🏴(England)</div>
+                  EnglandFlag ? <EnglandFlag className="h-20 w-32 rounded-md shadow-xl ring-1 ring-white/20" /> : <div className="text-4xl pointer-events-none">🏴(England)</div>
                 )}
               </div>
               <h2 className="mt-4 text-3xl font-black">
                 Vote locked in for {team === "NOR" ? "Norway" : "England"}!
               </h2>
-              <p className="mt-2 text-white/77">Enjoy the match, {name}. Good luck 🍀</p>
+              <p className="mt-2 text-white/70">Enjoy the match, {name}. Good luck 🍀</p>
               <div className="mt-6 inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/30 px-4 py-2 text-xs uppercase tracking-widest text-white/60">
                 <span className="h-2 w-2 animate-pulse rounded-full bg-orange-400" />
                 Waiting for full time
@@ -231,12 +243,13 @@ function TeamCard({
       onClick={onPick}
       className={`group relative flex h-72 flex-col items-center justify-center overflow-hidden rounded-3xl bg-gradient-to-br ${gradient} p-8 text-left shadow-2xl transition disabled:opacity-60 w-full`}
     >
-      <div className="absolute inset-0 opacity-20 mix-blend-overlay bg-[repeating-linear-gradient(45deg,black_0_2px,transparent_2px_20px)]" />
-      <div className="drop-shadow-2xl">{flag}</div>
-      <div className={`mt-4 text-4xl font-black tracking-tight ${dark ? "text-black" : "text-white"}`}>
+      {/* ADDED pointer-events-none to all children so clicks pass cleanly to the button */}
+      <div className="absolute inset-0 opacity-20 mix-blend-overlay bg-[repeating-linear-gradient(45deg,black_0_2px,transparent_2px_20px)] pointer-events-none" />
+      <div className="drop-shadow-2xl pointer-events-none">{flag}</div>
+      <div className={`mt-4 text-4xl font-black tracking-tight pointer-events-none ${dark ? "text-black" : "text-white"}`}>
         {name}
       </div>
-      <div className={`mt-2 text-sm font-semibold uppercase tracking-[0.3em] ${dark ? "text-black/60" : "text-white/70"}`}>
+      <div className={`mt-2 text-sm font-semibold uppercase tracking-[0.3em] pointer-events-none ${dark ? "text-black/60" : "text-white/70"}`}>
         Tap to vote
       </div>
     </motion.button>
@@ -248,7 +261,7 @@ function LiveBar({ nor, eng }: { nor: number; eng: number }) {
   const norPct = total ? (nor / total) * 100 : 50;
   const engPct = total ? (eng / total) * 100 : 50;
   return (
-    <section className="mt-12 rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur">
+    <section className="mt-12 rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur pointer-events-none">
       <div className="mb-3 flex items-center justify-between text-xs font-bold uppercase tracking-widest">
         <span className="flex items-center gap-2 text-white/80">
           {NorwayFlag ? <NorwayFlag className="h-4 w-6 rounded-sm" /> : <span>🇳🇴</span>}
