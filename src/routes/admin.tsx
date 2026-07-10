@@ -1,0 +1,258 @@
+import { createFileRoute } from "@tanstack/react-router";
+import { useEffect, useRef, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import confetti from "canvas-confetti";
+import { supabase } from "@/integrations/supabase/client";
+
+export const Route = createFileRoute("/admin")({
+  component: AdminPage,
+});
+
+type Vote = { id: string; name: string; team: "NOR" | "ENG" };
+
+function AdminPage() {
+  const [votes, setVotes] = useState<Vote[]>([]);
+  const [winnerTeam, setWinnerTeam] = useState<"NOR" | "ENG" | null>(null);
+  const [phase, setPhase] = useState<"idle" | "shuffling" | "won">("idle");
+  const [current, setCurrent] = useState<string>("");
+  const [winner, setWinner] = useState<string | null>(null);
+  const timers = useRef<number[]>([]);
+
+  async function load() {
+    const { data } = await supabase.from("votes").select("*").order("created_at");
+    setVotes((data ?? []) as Vote[]);
+  }
+
+  useEffect(() => {
+    load();
+    const ch = supabase
+      .channel("votes-admin")
+      .on("postgres_changes", { event: "*", schema: "public", table: "votes" }, load)
+      .subscribe();
+    return () => {
+      supabase.removeChannel(ch);
+      timers.current.forEach((t) => clearTimeout(t));
+    };
+  }, []);
+
+  const eligible = winnerTeam ? votes.filter((v) => v.team === winnerTeam) : [];
+  const norCount = votes.filter((v) => v.team === "NOR").length;
+  const engCount = votes.filter((v) => v.team === "ENG").length;
+
+  function startDraw() {
+    if (!winnerTeam || eligible.length === 0 || phase === "shuffling") return;
+    setPhase("shuffling");
+    setWinner(null);
+
+    const names = eligible.map((e) => e.name);
+    const finalWinner = names[Math.floor(Math.random() * names.length)];
+    const duration = 5000;
+    const start = performance.now();
+
+    const tick = () => {
+      const elapsed = performance.now() - start;
+      const progress = Math.min(elapsed / duration, 1);
+      // ease-out: interval grows from 40ms to 400ms
+      const interval = 40 + Math.pow(progress, 3) * 500;
+      setCurrent(names[Math.floor(Math.random() * names.length)]);
+      if (progress < 1) {
+        const id = window.setTimeout(tick, interval);
+        timers.current.push(id);
+      } else {
+        setCurrent(finalWinner);
+        setWinner(finalWinner);
+        setPhase("won");
+        celebrate();
+      }
+    };
+    tick();
+  }
+
+  function celebrate() {
+    const end = Date.now() + 2500;
+    const colors = ["#ef4444", "#3b82f6", "#fbbf24", "#ffffff"];
+    (function frame() {
+      confetti({ particleCount: 5, angle: 60, spread: 65, origin: { x: 0 }, colors });
+      confetti({ particleCount: 5, angle: 120, spread: 65, origin: { x: 1 }, colors });
+      if (Date.now() < end) requestAnimationFrame(frame);
+    })();
+    confetti({ particleCount: 200, spread: 100, origin: { y: 0.6 }, colors });
+  }
+
+  function reset() {
+    timers.current.forEach((t) => clearTimeout(t));
+    timers.current = [];
+    setPhase("idle");
+    setWinner(null);
+    setCurrent("");
+  }
+
+  return (
+    <div className="relative min-h-screen overflow-hidden bg-background text-foreground">
+      <div className="absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_center,oklch(0.25_0.06_265),transparent_70%)]" />
+
+      <header className="flex items-center justify-between px-8 py-6">
+        <div>
+          <div className="text-xs uppercase tracking-[0.3em] text-white/50">Admin · Lucky Draw</div>
+          <div className="mt-1 text-2xl font-black">Norway vs England</div>
+        </div>
+        <div className="flex gap-4 text-right text-sm">
+          <Stat label="Total votes" value={votes.length} />
+          <Stat label="🇳🇴 Norway" value={norCount} />
+          <Stat label="🏴󠁧󠁢󠁥󠁮󠁧󠁿 England" value={engCount} />
+        </div>
+      </header>
+
+      <main className="mx-auto max-w-7xl px-8 pb-16">
+        {/* Winner selector */}
+        {phase === "idle" && (
+          <section className="rounded-3xl border border-white/10 bg-white/5 p-8 backdrop-blur">
+            <h2 className="text-lg font-bold uppercase tracking-widest text-white/70">
+              1. Who won the match?
+            </h2>
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              <PickButton
+                active={winnerTeam === "NOR"}
+                onClick={() => setWinnerTeam("NOR")}
+                emoji="🇳🇴"
+                label="Norway"
+                count={norCount}
+              />
+              <PickButton
+                active={winnerTeam === "ENG"}
+                onClick={() => setWinnerTeam("ENG")}
+                emoji="🏴󠁧󠁢󠁥󠁮󠁧󠁿"
+                label="England"
+                count={engCount}
+              />
+            </div>
+
+            <h2 className="mt-8 text-lg font-bold uppercase tracking-widest text-white/70">
+              2. Eligible players ({eligible.length})
+            </h2>
+            <div className="mt-3 flex max-h-40 flex-wrap gap-2 overflow-y-auto">
+              {eligible.length === 0 && (
+                <p className="text-white/40">Select a winning team to see eligible players.</p>
+              )}
+              {eligible.map((v) => (
+                <span
+                  key={v.id}
+                  className="rounded-full border border-white/10 bg-black/30 px-3 py-1 text-sm text-white/80"
+                >
+                  {v.name}
+                </span>
+              ))}
+            </div>
+
+            <button
+              onClick={startDraw}
+              disabled={!winnerTeam || eligible.length === 0}
+              className="mt-8 w-full rounded-2xl bg-gradient-to-r from-[oklch(0.72_0.19_25)] to-[oklch(0.85_0.17_90)] px-6 py-5 text-xl font-black uppercase tracking-widest text-black shadow-2xl transition hover:brightness-110 disabled:opacity-40"
+            >
+              🎲 Start Lucky Draw
+            </button>
+          </section>
+        )}
+
+        {/* Roulette stage */}
+        <AnimatePresence>
+          {(phase === "shuffling" || phase === "won") && (
+            <motion.section
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-background/95 backdrop-blur-xl"
+            >
+              <div className="text-xs uppercase tracking-[0.5em] text-white/50">
+                {phase === "won" ? "Winner" : "Drawing…"}
+              </div>
+              <div className="relative mt-8 h-64 w-full max-w-4xl">
+                <AnimatePresence mode="popLayout">
+                  <motion.div
+                    key={current + phase}
+                    initial={{ opacity: 0, y: 40, scale: 0.8, filter: "blur(8px)" }}
+                    animate={{
+                      opacity: 1,
+                      y: 0,
+                      scale: phase === "won" ? 1.15 : 1,
+                      filter: "blur(0px)",
+                    }}
+                    exit={{ opacity: 0, y: -40, scale: 0.8, filter: "blur(8px)" }}
+                    transition={{ duration: phase === "won" ? 0.6 : 0.12 }}
+                    className="absolute inset-0 flex items-center justify-center"
+                  >
+                    <span
+                      className={`bg-gradient-to-r from-[oklch(0.72_0.19_25)] via-white to-[oklch(0.85_0.17_90)] bg-clip-text text-center text-6xl font-black tracking-tight text-transparent sm:text-8xl md:text-9xl ${
+                        phase === "won" ? "drop-shadow-[0_0_60px_rgba(255,200,0,0.6)]" : ""
+                      }`}
+                    >
+                      {current || "—"}
+                    </span>
+                  </motion.div>
+                </AnimatePresence>
+              </div>
+
+              {phase === "won" && winner && (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.3 }}
+                  className="mt-8 flex flex-col items-center gap-6"
+                >
+                  <div className="rounded-full border border-[oklch(0.85_0.17_90)]/50 bg-[oklch(0.85_0.17_90)]/10 px-6 py-2 text-sm font-bold uppercase tracking-[0.4em] text-[oklch(0.85_0.17_90)]">
+                    🏆 Congratulations
+                  </div>
+                  <button
+                    onClick={reset}
+                    className="rounded-xl border border-white/20 bg-white/5 px-6 py-3 text-sm font-semibold uppercase tracking-widest hover:bg-white/10"
+                  >
+                    Draw again
+                  </button>
+                </motion.div>
+              )}
+            </motion.section>
+          )}
+        </AnimatePresence>
+      </main>
+    </div>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-2">
+      <div className="text-[10px] uppercase tracking-widest text-white/50">{label}</div>
+      <div className="text-xl font-black">{value}</div>
+    </div>
+  );
+}
+
+function PickButton({
+  active,
+  onClick,
+  emoji,
+  label,
+  count,
+}: {
+  active: boolean;
+  onClick: () => void;
+  emoji: string;
+  label: string;
+  count: number;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`flex items-center justify-between rounded-2xl border p-5 text-left transition ${
+        active
+          ? "border-primary bg-primary/20"
+          : "border-white/10 bg-black/20 hover:border-white/30"
+      }`}
+    >
+      <div className="flex items-center gap-4">
+        <span className="text-4xl">{emoji}</span>
+        <span className="text-2xl font-black">{label}</span>
+      </div>
+      <span className="text-sm text-white/60">{count} votes</span>
+    </button>
+  );
+}
