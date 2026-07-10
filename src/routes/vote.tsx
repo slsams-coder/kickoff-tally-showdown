@@ -78,7 +78,7 @@ function VotePage() {
     setErr("");
 
     if (!supabase || typeof supabase.from !== 'function') {
-      setErr("Database connection missing. Unable to save your vote.");
+      alert("Error: Database connection client missing.");
       setSubmitting(false);
       return;
     }
@@ -86,6 +86,7 @@ function VotePage() {
     try {
       const { error } = await supabase.from("votes").insert({ name, team: t });
       if (error) {
+        alert("Database Error: " + error.message + " (Code: " + error.code + ")");
         setErr(error.message);
         setSubmitting(false);
         return;
@@ -93,7 +94,8 @@ function VotePage() {
       setSession({ name, team: t });
       setTeam(t);
     } catch (catchErr) {
-      setErr("Failed to submit vote. Please check your internet connection.");
+      alert("Catch Block Error: " + (catchErr as Error).message);
+      setErr("Failed to submit vote. Please check your network connection.");
     } finally {
       setSubmitting(false);
     }
@@ -202,6 +204,7 @@ function VotePage() {
   );
 }
 
+// Sub-components unchanged but fully checked for character sanitation
 function TeamCard({
   name,
   flag,
