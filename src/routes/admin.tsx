@@ -104,6 +104,8 @@ function AdminPage() {
       </header>
 
       <main className="mx-auto max-w-7xl px-8 pb-16">
+        <VoteBar nor={norCount} eng={engCount} />
+
         {/* Winner selector */}
         {phase === "idle" && (
           <section className="rounded-3xl border border-white/10 bg-white/5 p-8 backdrop-blur">
@@ -223,6 +225,33 @@ function Stat({ label, value }: { label: string; value: number }) {
       <div className="text-[10px] uppercase tracking-widest text-white/50">{label}</div>
       <div className="text-xl font-black">{value}</div>
     </div>
+  );
+}
+
+function VoteBar({ nor, eng }: { nor: number; eng: number }) {
+  const total = nor + eng;
+  const norPct = total ? (nor / total) * 100 : 50;
+  const engPct = total ? (eng / total) * 100 : 50;
+  return (
+    <section className="mb-8 rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur">
+      <div className="mb-3 flex items-center justify-between text-sm font-bold uppercase tracking-widest">
+        <span className="text-white/80">🇳🇴 Norway · {nor} ({norPct.toFixed(0)}%)</span>
+        <span className="text-white/50">Live</span>
+        <span className="text-white/80">({engPct.toFixed(0)}%) {eng} · 🏴󠁧󠁢󠁥󠁮󠁧󠁿 England</span>
+      </div>
+      <div className="flex h-8 w-full overflow-hidden rounded-full border border-white/10 bg-black/40">
+        <motion.div
+          animate={{ width: `${norPct}%` }}
+          transition={{ type: "spring", stiffness: 120, damping: 20 }}
+          className="h-full bg-gradient-to-r from-[oklch(0.62_0.22_25)] to-[oklch(0.72_0.19_25)]"
+        />
+        <motion.div
+          animate={{ width: `${engPct}%` }}
+          transition={{ type: "spring", stiffness: 120, damping: 20 }}
+          className="h-full bg-gradient-to-r from-white to-[oklch(0.85_0.02_265)]"
+        />
+      </div>
+    </section>
   );
 }
 

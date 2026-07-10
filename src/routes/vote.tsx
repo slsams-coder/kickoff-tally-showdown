@@ -14,6 +14,26 @@ function VotePage() {
   const [team, setTeam] = useState<"NOR" | "ENG" | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [err, setErr] = useState("");
+  const [counts, setCounts] = useState<{ NOR: number; ENG: number }>({ NOR: 0, ENG: 0 });
+
+  useEffect(() => {
+    async function load() {
+      const { data } = await supabase.from("votes").select("team");
+      const rows = (data ?? []) as { team: "NOR" | "ENG" }[];
+      setCounts({
+        NOR: rows.filter((r) => r.team === "NOR").length,
+        ENG: rows.filter((r) => r.team === "ENG").length,
+      });
+    }
+    load();
+    const ch = supabase
+      .channel("votes-live")
+      .on("postgres_changes", { event: "*", schema: "public", table: "votes" }, load)
+      .subscribe();
+    return () => {
+      supabase.removeChannel(ch);
+    };
+  }, []);
 
   useEffect(() => {
     const s = getSession();
@@ -120,6 +140,8 @@ function VotePage() {
         </AnimatePresence>
 
         {err && <p className="mt-4 text-sm text-primary">{err}</p>}
+
+        <LiveBar nor={counts.NOR} eng={counts.ENG} />
       </main>
     </div>
   );
@@ -158,5 +180,32 @@ function TeamCard({
         Tap to vote
       </div>
     </motion.button>
+  );
+}
+
+function LiveBar({ nor, eng }: { nor: number; eng: number }) {
+  const total = nor + eng;
+  const norPct = total ? (nor / total) * 100 : 50;
+  const engPct = total ? (eng / total) * 100 : 50;
+  return (
+    <section className="mt-12 rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur">
+      <div className="mb-3 flex items-center justify-between text-xs font-bold uppercase tracking-widest">
+        <span className="text-white/80">🇳🇴 {nor} · {norPct.toFixed(0)}%</span>
+        <span className="text-white/50">Live votes</span>
+        <span className="text-white/80">{engPct.toFixed(0)}% · {eng} 🏴󠁧󠁢󠁥󠁮󠁧󠁿</span>
+      </div>
+      <div className="flex h-6 w-full overflow-hidden rounded-full border border-white/10 bg-black/40">
+        <motion.div
+          animate={{ width: `${norPct}%` }}
+          transition={{ type: "spring", stiffness: 120, damping: 20 }}
+          className="h-full bg-gradient-to-r from-[oklch(0.62_0.22_25)] to-[oklch(0.72_0.19_25)]"
+        />
+        <motion.div
+          animate={{ width: `${engPct}%` }}
+          transition={{ type: "spring", stiffness: 120, damping: 20 }}
+          className="h-full bg-gradient-to-r from-white to-[oklch(0.85_0.02_265)]"
+        />
+      </div>
+    </section>
   );
 }
