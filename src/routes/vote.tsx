@@ -14,6 +14,26 @@ function VotePage() {
   const [team, setTeam] = useState<"NOR" | "ENG" | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [err, setErr] = useState("");
+  const [counts, setCounts] = useState<{ NOR: number; ENG: number }>({ NOR: 0, ENG: 0 });
+
+  useEffect(() => {
+    async function load() {
+      const { data } = await supabase.from("votes").select("team");
+      const rows = (data ?? []) as { team: "NOR" | "ENG" }[];
+      setCounts({
+        NOR: rows.filter((r) => r.team === "NOR").length,
+        ENG: rows.filter((r) => r.team === "ENG").length,
+      });
+    }
+    load();
+    const ch = supabase
+      .channel("votes-live")
+      .on("postgres_changes", { event: "*", schema: "public", table: "votes" }, load)
+      .subscribe();
+    return () => {
+      supabase.removeChannel(ch);
+    };
+  }, []);
 
   useEffect(() => {
     const s = getSession();
@@ -120,6 +140,8 @@ function VotePage() {
         </AnimatePresence>
 
         {err && <p className="mt-4 text-sm text-primary">{err}</p>}
+
+        <LiveBar nor={counts.NOR} eng={counts.ENG} />
       </main>
     </div>
   );
