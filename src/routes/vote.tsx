@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { getSession, setSession, clearSession } from "@/lib/session";
 import { supabase } from "@/integrations/supabase/client";
@@ -164,7 +164,7 @@ function TeamCard({
 }: {
   code: string;
   name: string;
-  flag: React.ReactNode;
+  flag: ReactNode;
   gradient: string;
   onPick: () => void;
   disabled: boolean;
