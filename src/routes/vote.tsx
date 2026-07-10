@@ -36,12 +36,9 @@ function VotePage() {
   }
 
   useEffect(() => {
-    // 1. Safe initial data fetch
     load();
-    
     let ch: any = null;
 
-    // 2. Wrap Realtime system in a try/catch to protect post-login render
     try {
       if (supabase && typeof supabase.channel === 'function') {
         ch = supabase
@@ -160,7 +157,7 @@ function VotePage() {
               <TeamCard
                 code="ENG"
                 name="England"
-                flag={EnglandFlag ? <EnglandFlag className="h-20 w-28 rounded-md shadow-2xl ring-1 ring-black/20" /> : <div className="text-2xl">🏴󠁧󠁢󠁥󠁮󠁧󠁿</div>}
+                flag={EnglandFlag ? <EnglandFlag className="h-20 w-28 rounded-md shadow-2xl ring-1 ring-black/20" /> : <div className="text-2xl">🏴(England)</div>}
                 gradient="from-white via-slate-100 to-blue-900"
                 dark
                 onPick={() => vote("ENG")}
@@ -178,13 +175,13 @@ function VotePage() {
                 {team === "NOR" ? (
                   NorwayFlag ? <NorwayFlag className="h-20 w-32 rounded-md shadow-xl ring-1 ring-white/20" /> : <div className="text-4xl">🇳🇴</div>
                 ) : (
-                  EnglandFlag ? <EnglandFlag className="h-20 w-32 rounded-md shadow-xl ring-1 ring-white/20" /> : <div className="text-4xl">🏴󠁧󠁢󠁥󠁮󠁧󠁿</div>
+                  EnglandFlag ? <EnglandFlag className="h-20 w-32 rounded-md shadow-xl ring-1 ring-white/20" /> : <div className="text-4xl">🏴(England)</div>
                 )}
               </div>
               <h2 className="mt-4 text-3xl font-black">
                 Vote locked in for {team === "NOR" ? "Norway" : "England"}!
               </h2>
-              <p className="mt-2 text-white/77">Enjoy the match, {name}. Good luck 🍀</p>
+              <p className="mt-2 text-white/70">Enjoy the match, {name}. Good luck 🍀</p>
               <div className="mt-6 inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/30 px-4 py-2 text-xs uppercase tracking-widest text-white/60">
                 <span className="h-2 w-2 animate-pulse rounded-full bg-orange-400" />
                 Waiting for full time
@@ -255,7 +252,7 @@ function LiveBar({ nor, eng }: { nor: number; eng: number }) {
         <span className="text-white/50">Live votes</span>
         <span className="flex items-center gap-2 text-white/80">
           {engPct.toFixed(0)}% · {eng}
-          {EnglandFlag ? <EnglandFlag className="h-4 w-6 rounded-sm" /> : <span>🏴󠁧󠁢󠁥󠁮󠁧󠁿</span>}
+          {EnglandFlag ? <EnglandFlag className="h-4 w-6 rounded-sm" /> : <span>🏴(England)</span>}
         </span>
       </div>
       <div className="flex h-6 w-full overflow-hidden rounded-full border border-white/10 bg-black/40">
