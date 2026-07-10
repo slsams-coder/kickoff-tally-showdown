@@ -104,6 +104,8 @@ function AdminPage() {
       </header>
 
       <main className="mx-auto max-w-7xl px-8 pb-16">
+        <VoteBar nor={norCount} eng={engCount} />
+
         {/* Winner selector */}
         {phase === "idle" && (
           <section className="rounded-3xl border border-white/10 bg-white/5 p-8 backdrop-blur">
