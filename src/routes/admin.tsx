@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import confetti from "canvas-confetti";
 import { supabase } from "@/integrations/supabase/client";
+import { NorwayFlag, EnglandFlag } from "@/components/Flag";
 
 export const Route = createFileRoute("/admin")({
   component: AdminPage,
@@ -87,6 +88,15 @@ function AdminPage() {
     setCurrent("");
   }
 
+  async function resetAll() {
+    if (!confirm("Clear ALL votes and start a new round? This cannot be undone.")) return;
+    reset();
+    setWinnerTeam(null);
+    const { error } = await supabase.from("votes").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+    if (error) alert("Failed to reset: " + error.message);
+    else load();
+  }
+
   return (
     <div className="relative min-h-screen overflow-hidden bg-background text-foreground">
       <div className="absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_center,oklch(0.25_0.06_265),transparent_70%)]" />
@@ -98,8 +108,14 @@ function AdminPage() {
         </div>
         <div className="flex gap-4 text-right text-sm">
           <Stat label="Total votes" value={votes.length} />
-          <Stat label="🇳🇴 Norway" value={norCount} />
-          <Stat label="🏴󠁧󠁢󠁥󠁮󠁧󠁿 England" value={engCount} />
+          <Stat label="Norway" value={norCount} icon={<NorwayFlag className="h-3 w-5 rounded-sm" />} />
+          <Stat label="England" value={engCount} icon={<EnglandFlag className="h-3 w-5 rounded-sm" />} />
+          <button
+            onClick={resetAll}
+            className="rounded-xl border border-destructive/50 bg-destructive/10 px-4 py-2 text-xs font-bold uppercase tracking-widest text-destructive-foreground hover:bg-destructive/20"
+          >
+            Reset round
+          </button>
         </div>
       </header>
 
@@ -116,14 +132,14 @@ function AdminPage() {
               <PickButton
                 active={winnerTeam === "NOR"}
                 onClick={() => setWinnerTeam("NOR")}
-                emoji="🇳🇴"
+                flag={<NorwayFlag className="h-10 w-14 rounded-md shadow-lg" />}
                 label="Norway"
                 count={norCount}
               />
               <PickButton
                 active={winnerTeam === "ENG"}
                 onClick={() => setWinnerTeam("ENG")}
-                emoji="🏴󠁧󠁢󠁥󠁮󠁧󠁿"
+                flag={<EnglandFlag className="h-10 w-14 rounded-md shadow-lg" />}
                 label="England"
                 count={engCount}
               />
@@ -219,10 +235,13 @@ function AdminPage() {
   );
 }
 
-function Stat({ label, value }: { label: string; value: number }) {
+function Stat({ label, value, icon }: { label: string; value: number; icon?: React.ReactNode }) {
   return (
     <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-2">
-      <div className="text-[10px] uppercase tracking-widest text-white/50">{label}</div>
+      <div className="flex items-center justify-end gap-1.5 text-[10px] uppercase tracking-widest text-white/50">
+        {icon}
+        {label}
+      </div>
       <div className="text-xl font-black">{value}</div>
     </div>
   );
@@ -235,9 +254,15 @@ function VoteBar({ nor, eng }: { nor: number; eng: number }) {
   return (
     <section className="mb-8 rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur">
       <div className="mb-3 flex items-center justify-between text-sm font-bold uppercase tracking-widest">
-        <span className="text-white/80">🇳🇴 Norway · {nor} ({norPct.toFixed(0)}%)</span>
+        <span className="flex items-center gap-2 text-white/80">
+          <NorwayFlag className="h-4 w-6 rounded-sm" />
+          Norway · {nor} ({norPct.toFixed(0)}%)
+        </span>
         <span className="text-white/50">Live</span>
-        <span className="text-white/80">({engPct.toFixed(0)}%) {eng} · 🏴󠁧󠁢󠁥󠁮󠁧󠁿 England</span>
+        <span className="flex items-center gap-2 text-white/80">
+          ({engPct.toFixed(0)}%) {eng} · England
+          <EnglandFlag className="h-4 w-6 rounded-sm" />
+        </span>
       </div>
       <div className="flex h-8 w-full overflow-hidden rounded-full border border-white/10 bg-black/40">
         <motion.div
@@ -258,13 +283,13 @@ function VoteBar({ nor, eng }: { nor: number; eng: number }) {
 function PickButton({
   active,
   onClick,
-  emoji,
+  flag,
   label,
   count,
 }: {
   active: boolean;
   onClick: () => void;
-  emoji: string;
+  flag: React.ReactNode;
   label: string;
   count: number;
 }) {
@@ -278,7 +303,7 @@ function PickButton({
       }`}
     >
       <div className="flex items-center gap-4">
-        <span className="text-4xl">{emoji}</span>
+        {flag}
         <span className="text-2xl font-black">{label}</span>
       </div>
       <span className="text-sm text-white/60">{count} votes</span>
