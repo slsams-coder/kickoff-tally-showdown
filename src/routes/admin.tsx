@@ -92,9 +92,22 @@ function AdminPage() {
     if (!confirm("Clear ALL votes and start a new round? This cannot be undone.")) return;
     reset();
     setWinnerTeam(null);
-    const { error } = await supabase.from("votes").delete().neq("id", "00000000-0000-0000-0000-000000000000");
-    if (error) alert("Failed to reset: " + error.message);
-    else load();
+    try {
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/reset-round`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          "Content-Type": "application/json",
+        },
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `Request failed (${res.status})`);
+      }
+      load();
+    } catch (err) {
+      alert("Failed to reset: " + (err as Error).message);
+    }
   }
 
   return (
