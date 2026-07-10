@@ -22,22 +22,37 @@ function AdminPage() {
   const [loadErr, setLoadErr] = useState("");
 
   async function load() {
-    const { data, error } = await supabase.from("votes").select("*").order("created_at");
-    if (error) {
-      setLoadErr(error.message);
+    if (!supabase) {
+      setLoadErr("Supabase client is not initialized. Please check your Vercel Environment Variables.");
       return;
     }
-    setVotes(Array.isArray(data) ? (data as Vote[]) : []);
+    try {
+      const { data, error } = await supabase.from("votes").select("*").order("created_at");
+      if (error) {
+        setLoadErr(error.message);
+        return;
+      }
+      setVotes(Array.isArray(data) ? (data as Vote[]) : []);
+    } catch (e) {
+      setLoadErr("Failed to connect to your database.");
+    }
   }
 
   useEffect(() => {
     load();
+    
+    // Protective check: Prevents the "Flash and Crash" if supabase isn't loaded
+    if (!supabase || typeof supabase.channel !== 'function') return;
+
     const ch = supabase
       .channel("votes-admin")
       .on("postgres_changes", { event: "*", schema: "public", table: "votes" }, load)
       .subscribe();
+
     return () => {
-      supabase.removeChannel(ch);
+      if (supabase && typeof supabase.removeChannel === 'function') {
+        supabase.removeChannel(ch);
+      }
       timers.current.forEach((t) => clearTimeout(t));
     };
   }, []);
@@ -61,7 +76,6 @@ function AdminPage() {
     const tick = () => {
       const elapsed = performance.now() - start;
       const progress = Math.min(elapsed / duration, 1);
-      // ease-out: interval grows from 40ms to 400ms
       const interval = 40 + Math.pow(progress, 3) * 500;
       setCurrent(names[Math.floor(Math.random() * names.length)] ?? "");
       if (progress < 1) {
@@ -100,18 +114,24 @@ function AdminPage() {
     if (!confirm("Clear ALL votes and start a new round? This cannot be undone.")) return;
     reset();
     setWinnerTeam(null);
+    
+    if (!supabase) {
+      alert("Database connection missing.");
+      return;
+    }
+
     try {
-      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/reset-round`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-          "Content-Type": "application/json",
-        },
-      });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.error || `Request failed (${res.status})`);
-      }
+      // FIXED: Instead of fetching a broken edge function, we delete rows directly
+      const { error } = await supabase
+        .from("votes")
+        .delete()
+        .neq("id", "00000000-0000-0000-0000-000000000000"); // Standard way to target all rows safely
+
+      if (error) throw error;
+      
+      // Instantly clear out local visual state
+      setVotes([]);
+      alert("Round reset successfully!");
       load();
     } catch (err) {
       alert("Failed to reset: " + (err as Error).message);
@@ -143,12 +163,11 @@ function AdminPage() {
       <main className="mx-auto max-w-7xl px-8 pb-16">
         {loadErr && (
           <div className="mb-4 rounded-xl border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive-foreground">
-            Failed to load votes: {loadErr}
+            Database Status Alert: {loadErr}
           </div>
         )}
         <VoteBar nor={norCount} eng={engCount} />
 
-        {/* Winner selector */}
         {phase === "idle" && (
           <section className="rounded-3xl border border-white/10 bg-white/5 p-8 backdrop-blur">
             <h2 className="text-lg font-bold uppercase tracking-widest text-white/70">
@@ -198,7 +217,6 @@ function AdminPage() {
           </section>
         )}
 
-        {/* Roulette stage */}
         <AnimatePresence>
           {(phase === "shuffling" || phase === "won") && (
             <motion.section
