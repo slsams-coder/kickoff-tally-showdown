@@ -18,74 +18,34 @@ function AdminPage() {
   const [current, setCurrent] = useState<string>("");
   const [winner, setWinner] = useState<string | null>(null);
   const timers = useRef<number[]>([]);
-  const [loadErr, setLoadErr] = useState("");
 
   async function load() {
-    if (!supabase || typeof supabase.from !== 'function') {
-      setLoadErr("Database client not fully initialized. Check Vercel Environment Variables.");
-      return;
-    }
-    try {
-      const { data, error } = await supabase.from("votes").select("*").order("created_at");
-      if (error) {
-        setLoadErr(error.message);
-        return;
-      }
-      setVotes(Array.isArray(data) ? (data as Vote[]) : []);
-    } catch (e) {
-      setLoadErr("Failed to pull data from Supabase.");
-    }
+    const { data } = await supabase.from("votes").select("*").order("created_at");
+    setVotes((data ?? []) as Vote[]);
   }
 
   useEffect(() => {
-    // 1. Load initial data safely
     load();
-    
-    let ch: any = null;
-
-    // 2. Wrap the entire real-time system in a try/catch to stop the "Flash & Crash"
-    try {
-      if (supabase && typeof supabase.channel === 'function') {
-        ch = supabase
-          .channel("votes-admin")
-          .on("postgres_changes", { event: "*", schema: "public", table: "votes" }, load);
-        
-        if (ch && typeof ch.subscribe === 'function') {
-          ch.subscribe();
-        }
-      }
-    } catch (realtimeError) {
-      console.warn("Realtime subscription failed, falling back to manual reload:", realtimeError);
-    }
-
-    // 3. Safe cleanup function
+    const ch = supabase
+      .channel("votes-admin")
+      .on("postgres_changes", { event: "*", schema: "public", table: "votes" }, load)
+      .subscribe();
     return () => {
-      try {
-        if (ch && supabase && typeof supabase.removeChannel === 'function') {
-          supabase.removeChannel(ch);
-        }
-      } catch (e) {}
+      supabase.removeChannel(ch);
       timers.current.forEach((t) => clearTimeout(t));
     };
   }, []);
 
-  // Super defensive data mapping to prevent any undefined loops
-  const safeVotes = Array.isArray(votes) ? votes : [];
-  const eligible = winnerTeam ? safeVotes.filter((v) => v && v.team === winnerTeam) : [];
-  const norCount = safeVotes.filter((v) => v && v.team === "NOR").length;
-  const engCount = safeVotes.filter((v) => v && v.team === "ENG").length;
+  const eligible = winnerTeam ? votes.filter((v) => v.team === winnerTeam) : [];
+  const norCount = votes.filter((v) => v.team === "NOR").length;
+  const engCount = votes.filter((v) => v.team === "ENG").length;
 
   function startDraw() {
     if (!winnerTeam || eligible.length === 0 || phase === "shuffling") return;
     setPhase("shuffling");
     setWinner(null);
 
-    const names = (eligible ?? []).map((e) => e?.name).filter(Boolean);
-    if (names.length === 0) {
-      setPhase("idle");
-      return;
-    }
-    
+    const names = eligible.map((e) => e.name);
     const finalWinner = names[Math.floor(Math.random() * names.length)];
     const duration = 5000;
     const start = performance.now();
@@ -93,8 +53,9 @@ function AdminPage() {
     const tick = () => {
       const elapsed = performance.now() - start;
       const progress = Math.min(elapsed / duration, 1);
+      // ease-out: interval grows from 40ms to 400ms
       const interval = 40 + Math.pow(progress, 3) * 500;
-      setCurrent(names[Math.floor(Math.random() * names.length)] ?? "");
+      setCurrent(names[Math.floor(Math.random() * names.length)]);
       if (progress < 1) {
         const id = window.setTimeout(tick, interval);
         timers.current.push(id);
@@ -131,31 +92,14 @@ function AdminPage() {
     if (!confirm("Clear ALL votes and start a new round? This cannot be undone.")) return;
     reset();
     setWinnerTeam(null);
-    
-    if (!supabase || typeof supabase.from !== 'function') {
-      alert("Database connection missing.");
-      return;
-    }
-
-    try {
-      const { error } = await supabase
-        .from("votes")
-        .delete()
-        .neq("id", "00000000-0000-0000-0000-000000000000");
-
-      if (error) throw error;
-      
-      setVotes([]);
-      alert("Round reset successfully!");
-      load();
-    } catch (err) {
-      alert("Failed to reset: " + (err as Error).message);
-    }
+    const { error } = await supabase.from("votes").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+    if (error) alert("Failed to reset: " + error.message);
+    else load();
   }
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-background text-foreground">
-      <div className="absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_center,rgba(40,40,80,0.5),transparent_70%)]" />
+      <div className="absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_center,oklch(0.25_0.06_265),transparent_70%)]" />
 
       <header className="flex items-center justify-between px-8 py-6">
         <div>
@@ -163,9 +107,9 @@ function AdminPage() {
           <div className="mt-1 text-2xl font-black">Norway vs England</div>
         </div>
         <div className="flex gap-4 text-right text-sm">
-          <Stat label="Total votes" value={safeVotes.length} />
-          <Stat label="Norway" value={norCount} icon={NorwayFlag ? <NorwayFlag className="h-3 w-5 rounded-sm" /> : null} />
-          <Stat label="England" value={engCount} icon={EnglandFlag ? <EnglandFlag className="h-3 w-5 rounded-sm" /> : null} />
+          <Stat label="Total votes" value={votes.length} />
+          <Stat label="Norway" value={norCount} icon={<NorwayFlag className="h-3 w-5 rounded-sm" />} />
+          <Stat label="England" value={engCount} icon={<EnglandFlag className="h-3 w-5 rounded-sm" />} />
           <button
             onClick={resetAll}
             className="rounded-xl border border-destructive/50 bg-destructive/10 px-4 py-2 text-xs font-bold uppercase tracking-widest text-destructive-foreground hover:bg-destructive/20"
@@ -176,13 +120,9 @@ function AdminPage() {
       </header>
 
       <main className="mx-auto max-w-7xl px-8 pb-16">
-        {loadErr && (
-          <div className="mb-4 rounded-xl border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive-foreground">
-            Status Message: {loadErr}
-          </div>
-        )}
         <VoteBar nor={norCount} eng={engCount} />
 
+        {/* Winner selector */}
         {phase === "idle" && (
           <section className="rounded-3xl border border-white/10 bg-white/5 p-8 backdrop-blur">
             <h2 className="text-lg font-bold uppercase tracking-widest text-white/70">
@@ -192,14 +132,14 @@ function AdminPage() {
               <PickButton
                 active={winnerTeam === "NOR"}
                 onClick={() => setWinnerTeam("NOR")}
-                flag={NorwayFlag ? <NorwayFlag className="h-10 w-14 rounded-md shadow-lg" /> : null}
+                flag={<NorwayFlag className="h-10 w-14 rounded-md shadow-lg" />}
                 label="Norway"
                 count={norCount}
               />
               <PickButton
                 active={winnerTeam === "ENG"}
                 onClick={() => setWinnerTeam("ENG")}
-                flag={EnglandFlag ? <EnglandFlag className="h-10 w-14 rounded-md shadow-lg" /> : null}
+                flag={<EnglandFlag className="h-10 w-14 rounded-md shadow-lg" />}
                 label="England"
                 count={engCount}
               />
@@ -214,10 +154,10 @@ function AdminPage() {
               )}
               {eligible.map((v) => (
                 <span
-                  key={v?.id || v?.name || Math.random().toString()}
+                  key={v.id}
                   className="rounded-full border border-white/10 bg-black/30 px-3 py-1 text-sm text-white/80"
                 >
-                  {v?.name || "Anonymous"}
+                  {v.name}
                 </span>
               ))}
             </div>
@@ -225,19 +165,20 @@ function AdminPage() {
             <button
               onClick={startDraw}
               disabled={!winnerTeam || eligible.length === 0}
-              className="mt-8 w-full rounded-2xl bg-gradient-to-r from-orange-400 to-amber-300 px-6 py-5 text-xl font-black uppercase tracking-widest text-black shadow-2xl transition hover:brightness-110 disabled:opacity-40"
+              className="mt-8 w-full rounded-2xl bg-gradient-to-r from-[oklch(0.72_0.19_25)] to-[oklch(0.85_0.17_90)] px-6 py-5 text-xl font-black uppercase tracking-widest text-black shadow-2xl transition hover:brightness-110 disabled:opacity-40"
             >
               🎲 Start Lucky Draw
             </button>
           </section>
         )}
 
+        {/* Roulette stage */}
         <AnimatePresence>
           {(phase === "shuffling" || phase === "won") && (
             <motion.section
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/95 backdrop-blur-xl"
+              className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-background/95 backdrop-blur-xl"
             >
               <div className="text-xs uppercase tracking-[0.5em] text-white/50">
                 {phase === "won" ? "Winner" : "Drawing…"}
@@ -258,7 +199,7 @@ function AdminPage() {
                     className="absolute inset-0 flex items-center justify-center"
                   >
                     <span
-                      className={`bg-gradient-to-r from-orange-400 via-white to-amber-200 bg-clip-text text-center text-6xl font-black tracking-tight text-transparent sm:text-8xl md:text-9xl ${
+                      className={`bg-gradient-to-r from-[oklch(0.72_0.19_25)] via-white to-[oklch(0.85_0.17_90)] bg-clip-text text-center text-6xl font-black tracking-tight text-transparent sm:text-8xl md:text-9xl ${
                         phase === "won" ? "drop-shadow-[0_0_60px_rgba(255,200,0,0.6)]" : ""
                       }`}
                     >
@@ -275,7 +216,7 @@ function AdminPage() {
                   transition={{ delay: 0.3 }}
                   className="mt-8 flex flex-col items-center gap-6"
                 >
-                  <div className="rounded-full border border-amber-400/50 bg-amber-400/10 px-6 py-2 text-sm font-bold uppercase tracking-[0.4em] text-amber-300">
+                  <div className="rounded-full border border-[oklch(0.85_0.17_90)]/50 bg-[oklch(0.85_0.17_90)]/10 px-6 py-2 text-sm font-bold uppercase tracking-[0.4em] text-[oklch(0.85_0.17_90)]">
                     🏆 Congratulations
                   </div>
                   <button
@@ -314,25 +255,25 @@ function VoteBar({ nor, eng }: { nor: number; eng: number }) {
     <section className="mb-8 rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur">
       <div className="mb-3 flex items-center justify-between text-sm font-bold uppercase tracking-widest">
         <span className="flex items-center gap-2 text-white/80">
-          {NorwayFlag ? <NorwayFlag className="h-4 w-6 rounded-sm" /> : null}
+          <NorwayFlag className="h-4 w-6 rounded-sm" />
           Norway · {nor} ({norPct.toFixed(0)}%)
         </span>
         <span className="text-white/50">Live</span>
         <span className="flex items-center gap-2 text-white/80">
           ({engPct.toFixed(0)}%) {eng} · England
-          {EnglandFlag ? <EnglandFlag className="h-4 w-6 rounded-sm" /> : null}
+          <EnglandFlag className="h-4 w-6 rounded-sm" />
         </span>
       </div>
       <div className="flex h-8 w-full overflow-hidden rounded-full border border-white/10 bg-black/40">
         <motion.div
           animate={{ width: `${norPct}%` }}
           transition={{ type: "spring", stiffness: 120, damping: 20 }}
-          className="h-full bg-gradient-to-r from-red-600 to-red-400"
+          className="h-full bg-gradient-to-r from-[oklch(0.62_0.22_25)] to-[oklch(0.72_0.19_25)]"
         />
         <motion.div
           animate={{ width: `${engPct}%` }}
           transition={{ type: "spring", stiffness: 120, damping: 20 }}
-          className="h-full bg-gradient-to-r from-white to-gray-300"
+          className="h-full bg-gradient-to-r from-white to-[oklch(0.85_0.02_265)]"
         />
       </div>
     </section>
@@ -351,13 +292,13 @@ function PickButton({
   flag: React.ReactNode;
   label: string;
   count: number;
- }) {
+}) {
   return (
     <button
       onClick={onClick}
       className={`flex items-center justify-between rounded-2xl border p-5 text-left transition ${
         active
-          ? "border-amber-400 bg-amber-400/20"
+          ? "border-primary bg-primary/20"
           : "border-white/10 bg-black/20 hover:border-white/30"
       }`}
     >
