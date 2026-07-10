@@ -17,28 +17,57 @@ function VotePage() {
   const [err, setErr] = useState("");
   const [counts, setCounts] = useState<{ NOR: number; ENG: number }>({ NOR: 0, ENG: 0 });
 
-  useEffect(() => {
-    async function load() {
-      const { data } = await supabase.from("votes").select("team");
+  async function load() {
+    if (!supabase || typeof supabase.from !== 'function') return;
+    try {
+      const { data, error } = await supabase.from("votes").select("team");
+      if (error) {
+        console.error(error.message);
+        return;
+      }
       const rows = (data ?? []) as { team: "NOR" | "ENG" }[];
       setCounts({
-        NOR: rows.filter((r) => r.team === "NOR").length,
-        ENG: rows.filter((r) => r.team === "ENG").length,
+        NOR: rows.filter((r) => r && r.team === "NOR").length,
+        ENG: rows.filter((r) => r && r.team === "ENG").length,
       });
+    } catch (e) {
+      console.warn("Failed to load live counts from database.");
     }
+  }
+
+  useEffect(() => {
+    // 1. Safe initial data fetch
     load();
-    const ch = supabase
-      .channel("votes-live")
-      .on("postgres_changes", { event: "*", schema: "public", table: "votes" }, load)
-      .subscribe();
+    
+    let ch: any = null;
+
+    // 2. Wrap Realtime system in a try/catch to protect post-login render
+    try {
+      if (supabase && typeof supabase.channel === 'function') {
+        ch = supabase
+          .channel("votes-live")
+          .on("postgres_changes", { event: "*", schema: "public", table: "votes" }, load);
+        
+        if (ch && typeof ch.subscribe === 'function') {
+          ch.subscribe();
+        }
+      }
+    } catch (realtimeError) {
+      console.warn("Realtime streaming unavailable; falling back to static loads:", realtimeError);
+    }
+
     return () => {
-      supabase.removeChannel(ch);
+      try {
+        if (ch && supabase && typeof supabase.removeChannel === 'function') {
+          supabase.removeChannel(ch);
+        }
+      } catch (e) {}
     };
   }, []);
 
   useEffect(() => {
     const s = getSession();
-    if (!s) {
+    if (!s || !s.name) {
       navigate({ to: "/" });
       return;
     }
@@ -50,23 +79,41 @@ function VotePage() {
     if (submitting || team || !name) return;
     setSubmitting(true);
     setErr("");
-    const { error } = await supabase.from("votes").insert({ name, team: t });
-    if (error) {
-      setErr(error.message);
+
+    if (!supabase || typeof supabase.from !== 'function') {
+      setErr("Database connection missing. Unable to save your vote.");
       setSubmitting(false);
       return;
     }
-    setSession({ name, team: t });
-    setTeam(t);
-    setSubmitting(false);
+
+    try {
+      const { error } = await supabase.from("votes").insert({ name, team: t });
+      if (error) {
+        setErr(error.message);
+        setSubmitting(false);
+        return;
+      }
+      setSession({ name, team: t });
+      setTeam(t);
+    } catch (catchErr) {
+      setErr("Failed to submit vote. Please check your internet connection.");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
-  if (!name) return null;
+  if (!name) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background text-foreground">
+        <p className="text-sm tracking-widest text-white/40 uppercase animate-pulse">Verifying Session...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-background text-foreground">
       <div className="absolute inset-0 -z-10">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,oklch(0.3_0.09_265),transparent_70%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(40,40,80,0.5),transparent_70%)]" />
       </div>
 
       <header className="flex items-center justify-between px-6 py-5">
@@ -76,7 +123,7 @@ function VotePage() {
             clearSession();
             navigate({ to: "/" });
           }}
-          className="text-xs uppercase tracking-widest text-white/50 hover:text-white"
+          className="text-xs uppercase tracking-widest text-white/50 hover:text-white transition"
         >
           Sign out
         </button>
@@ -105,16 +152,16 @@ function VotePage() {
               <TeamCard
                 code="NOR"
                 name="Norway"
-                flag={<NorwayFlag className="h-20 w-28 rounded-md shadow-2xl ring-1 ring-black/20" />}
-                gradient="from-[oklch(0.62_0.22_25)] via-[oklch(0.5_0.18_260)] to-[oklch(0.3_0.1_265)]"
+                flag={NorwayFlag ? <NorwayFlag className="h-20 w-28 rounded-md shadow-2xl ring-1 ring-black/20" /> : <div className="text-2xl">🇳🇴</div>}
+                gradient="from-red-600 via-blue-900 to-slate-900"
                 onPick={() => vote("NOR")}
                 disabled={submitting}
               />
               <TeamCard
                 code="ENG"
                 name="England"
-                flag={<EnglandFlag className="h-20 w-28 rounded-md shadow-2xl ring-1 ring-black/20" />}
-                gradient="from-white via-[oklch(0.85_0.02_265)] to-[oklch(0.55_0.24_27)]"
+                flag={EnglandFlag ? <EnglandFlag className="h-20 w-28 rounded-md shadow-2xl ring-1 ring-black/20" /> : <div className="text-2xl">🏴󠁧󠁢󠁥󠁮󠁧󠁿</div>}
+                gradient="from-white via-slate-100 to-blue-900"
                 dark
                 onPick={() => vote("ENG")}
                 disabled={submitting}
@@ -129,24 +176,28 @@ function VotePage() {
             >
               <div className="flex justify-center">
                 {team === "NOR" ? (
-                  <NorwayFlag className="h-20 w-32 rounded-md shadow-xl ring-1 ring-white/20" />
+                  NorwayFlag ? <NorwayFlag className="h-20 w-32 rounded-md shadow-xl ring-1 ring-white/20" /> : <div className="text-4xl">🇳🇴</div>
                 ) : (
-                  <EnglandFlag className="h-20 w-32 rounded-md shadow-xl ring-1 ring-white/20" />
+                  EnglandFlag ? <EnglandFlag className="h-20 w-32 rounded-md shadow-xl ring-1 ring-white/20" /> : <div className="text-4xl">🏴󠁧󠁢󠁥󠁮󠁧󠁿</div>
                 )}
               </div>
               <h2 className="mt-4 text-3xl font-black">
                 Vote locked in for {team === "NOR" ? "Norway" : "England"}!
               </h2>
-              <p className="mt-2 text-white/70">Enjoy the match, {name}. Good luck 🍀</p>
+              <p className="mt-2 text-white/77">Enjoy the match, {name}. Good luck 🍀</p>
               <div className="mt-6 inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/30 px-4 py-2 text-xs uppercase tracking-widest text-white/60">
-                <span className="h-2 w-2 animate-pulse rounded-full bg-primary" />
+                <span className="h-2 w-2 animate-pulse rounded-full bg-orange-400" />
                 Waiting for full time
               </div>
             </motion.div>
           )}
         </AnimatePresence>
 
-        {err && <p className="mt-4 text-sm text-primary">{err}</p>}
+        {err && (
+          <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-2 text-sm text-red-400">
+            {err}
+          </div>
+        )}
 
         <LiveBar nor={counts.NOR} eng={counts.ENG} />
       </main>
@@ -198,25 +249,25 @@ function LiveBar({ nor, eng }: { nor: number; eng: number }) {
     <section className="mt-12 rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur">
       <div className="mb-3 flex items-center justify-between text-xs font-bold uppercase tracking-widest">
         <span className="flex items-center gap-2 text-white/80">
-          <NorwayFlag className="h-4 w-6 rounded-sm" />
+          {NorwayFlag ? <NorwayFlag className="h-4 w-6 rounded-sm" /> : <span>🇳🇴</span>}
           {nor} · {norPct.toFixed(0)}%
         </span>
         <span className="text-white/50">Live votes</span>
         <span className="flex items-center gap-2 text-white/80">
           {engPct.toFixed(0)}% · {eng}
-          <EnglandFlag className="h-4 w-6 rounded-sm" />
+          {EnglandFlag ? <EnglandFlag className="h-4 w-6 rounded-sm" /> : <span>🏴󠁧󠁢󠁥󠁮󠁧󠁿</span>}
         </span>
       </div>
       <div className="flex h-6 w-full overflow-hidden rounded-full border border-white/10 bg-black/40">
         <motion.div
           animate={{ width: `${norPct}%` }}
           transition={{ type: "spring", stiffness: 120, damping: 20 }}
-          className="h-full bg-gradient-to-r from-[oklch(0.62_0.22_25)] to-[oklch(0.72_0.19_25)]"
+          className="h-full bg-gradient-to-r from-red-600 to-red-400"
         />
         <motion.div
           animate={{ width: `${engPct}%` }}
           transition={{ type: "spring", stiffness: 120, damping: 20 }}
-          className="h-full bg-gradient-to-r from-white to-[oklch(0.85_0.02_265)]"
+          className="h-full bg-gradient-to-r from-white to-gray-300"
         />
       </div>
     </section>
