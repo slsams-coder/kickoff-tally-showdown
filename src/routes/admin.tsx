@@ -19,9 +19,15 @@ function AdminPage() {
   const [winner, setWinner] = useState<string | null>(null);
   const timers = useRef<number[]>([]);
 
+  const [loadErr, setLoadErr] = useState("");
+
   async function load() {
-    const { data } = await supabase.from("votes").select("*").order("created_at");
-    setVotes((data ?? []) as Vote[]);
+    const { data, error } = await supabase.from("votes").select("*").order("created_at");
+    if (error) {
+      setLoadErr(error.message);
+      return;
+    }
+    setVotes(Array.isArray(data) ? (data as Vote[]) : []);
   }
 
   useEffect(() => {
@@ -36,16 +42,18 @@ function AdminPage() {
     };
   }, []);
 
-  const eligible = winnerTeam ? votes.filter((v) => v.team === winnerTeam) : [];
-  const norCount = votes.filter((v) => v.team === "NOR").length;
-  const engCount = votes.filter((v) => v.team === "ENG").length;
+  const safeVotes = Array.isArray(votes) ? votes : [];
+  const eligible = winnerTeam ? safeVotes.filter((v) => v?.team === winnerTeam) : [];
+  const norCount = safeVotes.filter((v) => v?.team === "NOR").length;
+  const engCount = safeVotes.filter((v) => v?.team === "ENG").length;
 
   function startDraw() {
     if (!winnerTeam || eligible.length === 0 || phase === "shuffling") return;
     setPhase("shuffling");
     setWinner(null);
 
-    const names = eligible.map((e) => e.name);
+    const names = (eligible ?? []).map((e) => e?.name).filter(Boolean);
+    if (names.length === 0) return;
     const finalWinner = names[Math.floor(Math.random() * names.length)];
     const duration = 5000;
     const start = performance.now();
@@ -55,7 +63,7 @@ function AdminPage() {
       const progress = Math.min(elapsed / duration, 1);
       // ease-out: interval grows from 40ms to 400ms
       const interval = 40 + Math.pow(progress, 3) * 500;
-      setCurrent(names[Math.floor(Math.random() * names.length)]);
+      setCurrent(names[Math.floor(Math.random() * names.length)] ?? "");
       if (progress < 1) {
         const id = window.setTimeout(tick, interval);
         timers.current.push(id);
@@ -120,7 +128,7 @@ function AdminPage() {
           <div className="mt-1 text-2xl font-black">Norway vs England</div>
         </div>
         <div className="flex gap-4 text-right text-sm">
-          <Stat label="Total votes" value={votes.length} />
+          <Stat label="Total votes" value={safeVotes.length} />
           <Stat label="Norway" value={norCount} icon={<NorwayFlag className="h-3 w-5 rounded-sm" />} />
           <Stat label="England" value={engCount} icon={<EnglandFlag className="h-3 w-5 rounded-sm" />} />
           <button
@@ -133,6 +141,11 @@ function AdminPage() {
       </header>
 
       <main className="mx-auto max-w-7xl px-8 pb-16">
+        {loadErr && (
+          <div className="mb-4 rounded-xl border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive-foreground">
+            Failed to load votes: {loadErr}
+          </div>
+        )}
         <VoteBar nor={norCount} eng={engCount} />
 
         {/* Winner selector */}
@@ -165,12 +178,12 @@ function AdminPage() {
               {eligible.length === 0 && (
                 <p className="text-white/40">Select a winning team to see eligible players.</p>
               )}
-              {eligible.map((v) => (
+              {(eligible ?? []).map((v) => (
                 <span
-                  key={v.id}
+                  key={v?.id ?? v?.name}
                   className="rounded-full border border-white/10 bg-black/30 px-3 py-1 text-sm text-white/80"
                 >
-                  {v.name}
+                  {v?.name}
                 </span>
               ))}
             </div>
