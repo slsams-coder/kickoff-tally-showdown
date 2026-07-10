@@ -73,29 +73,32 @@ function VotePage() {
   }, [navigate]);
 
   async function vote(t: "NOR" | "ENG") {
-    if (submitting || team || !name) return;
+    // Defensive check removed to prevent early click blockages
     setSubmitting(true);
     setErr("");
 
+    const activeName = name || getSession()?.name || "Anonymous";
+
     if (!supabase || typeof supabase.from !== 'function') {
-      alert("Error: Database connection client missing.");
+      alert("Error: Supabase connection client is missing.");
       setSubmitting(false);
       return;
     }
 
     try {
-      const { error } = await supabase.from("votes").insert({ name, team: t });
+      const { error } = await supabase.from("votes").insert({ name: activeName, team: t });
       if (error) {
         alert("Database Error: " + error.message + " (Code: " + error.code + ")");
         setErr(error.message);
         setSubmitting(false);
         return;
       }
-      setSession({ name, team: t });
+      setSession({ name: activeName, team: t });
       setTeam(t);
+      load(); // Refresh state data dynamically
     } catch (catchErr) {
       alert("Catch Block Error: " + (catchErr as Error).message);
-      setErr("Failed to submit vote. Please check your network connection.");
+      setErr("Failed to submit vote.");
     } finally {
       setSubmitting(false);
     }
@@ -183,7 +186,7 @@ function VotePage() {
               <h2 className="mt-4 text-3xl font-black">
                 Vote locked in for {team === "NOR" ? "Norway" : "England"}!
               </h2>
-              <p className="mt-2 text-white/70">Enjoy the match, {name}. Good luck 🍀</p>
+              <p className="mt-2 text-white/77">Enjoy the match, {name}. Good luck 🍀</p>
               <div className="mt-6 inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/30 px-4 py-2 text-xs uppercase tracking-widest text-white/60">
                 <span className="h-2 w-2 animate-pulse rounded-full bg-orange-400" />
                 Waiting for full time
@@ -204,7 +207,6 @@ function VotePage() {
   );
 }
 
-// Sub-components unchanged but fully checked for character sanitation
 function TeamCard({
   name,
   flag,
@@ -227,7 +229,7 @@ function TeamCard({
       whileTap={{ scale: 0.97 }}
       disabled={disabled}
       onClick={onPick}
-      className={`group relative flex h-72 flex-col items-center justify-center overflow-hidden rounded-3xl bg-gradient-to-br ${gradient} p-8 text-left shadow-2xl transition disabled:opacity-60`}
+      className={`group relative flex h-72 flex-col items-center justify-center overflow-hidden rounded-3xl bg-gradient-to-br ${gradient} p-8 text-left shadow-2xl transition disabled:opacity-60 w-full`}
     >
       <div className="absolute inset-0 opacity-20 mix-blend-overlay bg-[repeating-linear-gradient(45deg,black_0_2px,transparent_2px_20px)]" />
       <div className="drop-shadow-2xl">{flag}</div>
