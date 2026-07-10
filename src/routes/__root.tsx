@@ -80,11 +80,15 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { title: "Matchday — Norway vs England Live Vote" },
       { name: "description", content: "Live school screening vote & lucky draw for Norway vs England." },
       { name: "author", content: "Matchday" },
-      { property: "og:title", content: "Matchday — Norway vs England" },
-      { property: "og:description", content: "Vote for the winner and join the live lucky draw." },
+      { property: "og:title", content: "Matchday — Norway vs England Live Vote" },
+      { property: "og:description", content: "Live school screening vote & lucky draw for Norway vs England." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
       { name: "twitter:site", content: "@Lovable" },
+      { name: "twitter:title", content: "Matchday — Norway vs England Live Vote" },
+      { name: "twitter:description", content: "Live school screening vote & lucky draw for Norway vs England." },
+      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/2f9ea96e-bb31-4948-a91b-cfd8c4fea624/id-preview-54a3ebdb--f2b3540a-dd7c-4a58-a3c5-39dec221b901.lovable.app-1783670156378.png" },
+      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/2f9ea96e-bb31-4948-a91b-cfd8c4fea624/id-preview-54a3ebdb--f2b3540a-dd7c-4a58-a3c5-39dec221b901.lovable.app-1783670156378.png" },
     ],
     links: [
       {
