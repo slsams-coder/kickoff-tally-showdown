@@ -1,0 +1,1 @@
+CREATE POLICY "anyone can delete votes" ON public.votes FOR DELETE TO public USING (true);
